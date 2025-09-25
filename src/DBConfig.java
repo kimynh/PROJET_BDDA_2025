@@ -55,4 +55,5 @@ public class DBConfig {
     public String toString() {
         return "DBConfig{dbpath='" + dbpath + "'}";
     }
-}
+};
+
