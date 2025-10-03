@@ -1,3 +1,5 @@
+import java.io.EOFException;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -10,14 +12,12 @@ public class DiskManager implements AutoCloseable {
     private final DBConfig cfg;
     private final Path binDataDir;
 
-    // optional caches (will use later)
-    private RandomAccessFile[] rafs;
-    private FileChannel[] chans;
+    private final RandomAccessFile[] rafs;
+    private final FileChannel[] chans;
 
     public DiskManager(DBConfig cfg) {
         this.cfg = cfg;
         String raw = cfg.getDbpath();
-        // safety: strip inline comment like "DB // ..."
         int commentPos = raw.indexOf("//");
         if (commentPos >= 0) raw = raw.substring(0, commentPos);
         raw = raw.trim();
@@ -26,29 +26,23 @@ public class DiskManager implements AutoCloseable {
         this.chans = new FileChannel[cfg.getDm_maxfilecount()];
     }
 
+    // ----------- Init / Finish -----------
     public void Init() throws IOException {
-        // Ensure DB/BinData exists
         Files.createDirectories(binDataDir);
-        // Ensure Data0.bin exists and has at least 1 page (page 0 = meta/bitmap)
-        ensureFileInitialized(0);
+        ensureFileInitialized(0); // make sure Data0.bin exists with meta page
     }
 
     public void Finish() throws IOException {
-        // flush + close any opened channels/files
-        if (chans != null) {
-            for (int i = 0; i < chans.length; i++) {
-                if (chans[i] != null && chans[i].isOpen()) {
-                    chans[i].force(true);
-                    chans[i].close();
-                }
-                chans[i] = null;
+        for (int i = 0; i < chans.length; i++) {
+            if (chans[i] != null && chans[i].isOpen()) {
+                chans[i].force(true);
+                chans[i].close();
             }
+            chans[i] = null;
         }
-        if (rafs != null) {
-            for (int i = 0; i < rafs.length; i++) {
-                if (rafs[i] != null) rafs[i].close();
-                rafs[i] = null;
-            }
+        for (int i = 0; i < rafs.length; i++) {
+            if (rafs[i] != null) rafs[i].close();
+            rafs[i] = null;
         }
     }
 
@@ -57,9 +51,45 @@ public class DiskManager implements AutoCloseable {
         Finish();
     }
 
-    // ---------- helpers (we’ll add more later) ----------
+    // ----------- AllocPage (Step 3B) -----------
+    public PageId AllocPage() throws IOException {
+        // 1) try to reuse a freed page in existing files
+        for (int f = 0; f < cfg.getDm_maxfilecount(); f++) {
+            if (!Files.exists(filePath(f))) continue;
+            int freeIdx = findFreePageInFile(f);
+            if (freeIdx >= 1) {
+                markPageUsed(f, freeIdx, true);
+                return new PageId(f, freeIdx);
+            }
+        }
+        // 2) else create/init file and allocate next page
+        for (int f = 0; f < cfg.getDm_maxfilecount(); f++) {
+            ensureFileInitialized(f);
+            int freeIdx = findFreePageInFile(f);
+            if (freeIdx >= 1) {
+                markPageUsed(f, freeIdx, true);
+                return new PageId(f, freeIdx);
+            }
+        }
+        throw new IOException("No more files available (dm_maxfilecount reached).");
+    }
+
+    // ----------- Helpers for files & bitmap -----------
+
     private Path filePath(int fileIdx) {
         return binDataDir.resolve("Data" + fileIdx + ".bin");
+    }
+
+    private RandomAccessFile raf(int fileIdx) throws IOException {
+        if (rafs[fileIdx] == null)
+            rafs[fileIdx] = new RandomAccessFile(filePath(fileIdx).toFile(), "rw");
+        return rafs[fileIdx];
+    }
+
+    private FileChannel channel(int fileIdx) throws IOException {
+        if (chans[fileIdx] == null || !chans[fileIdx].isOpen())
+            chans[fileIdx] = raf(fileIdx).getChannel();
+        return chans[fileIdx];
     }
 
     private void ensureFileInitialized(int fileIdx) throws IOException {
@@ -67,9 +97,83 @@ public class DiskManager implements AutoCloseable {
         if (Files.exists(p)) return;
         if (fileIdx >= cfg.getDm_maxfilecount())
             throw new IOException("fileIdx >= dm_maxfilecount");
-        // create file with one page (page 0 reserved for meta/bitmap)
         try (RandomAccessFile raf = new RandomAccessFile(p.toFile(), "rw")) {
-            raf.setLength(cfg.getPagesize());
+            raf.setLength(cfg.getPagesize()); // page 0 = meta/bitmap
         }
+    }
+
+    private int computeNextPageIdx(int fileIdx) throws IOException {
+        long size = channel(fileIdx).size();
+        return (int) (size / cfg.getPagesize());
+    }
+
+    private void ensurePageCapacity(int fileIdx, int pageIdx) throws IOException {
+        FileChannel ch = channel(fileIdx);
+        long need = ((long) (pageIdx + 1)) * cfg.getPagesize();
+        if (ch.size() < need) {
+            ByteBuffer zeros = ByteBuffer.allocate(cfg.getPagesize());
+            while (ch.size() < need) {
+                ch.write(zeros, ch.size());
+                zeros.clear();
+            }
+            ch.force(false);
+        }
+    }
+
+    private boolean readBitmapBit(int fileIdx, int pageIdx) throws IOException {
+        if (pageIdx <= 0) return true; // meta always used
+        int k = pageIdx - 1;
+        int byteIdx = k / 8;
+        int bit = k % 8;
+        ByteBuffer one = ByteBuffer.allocate(1);
+        int r = channel(fileIdx).read(one, byteIdx);
+        if (r <= 0) return false; // default free
+        int b = one.get(0) & 0xFF;
+        return (b & (1 << bit)) != 0;
+    }
+
+    private void writeBitmapBit(int fileIdx, int pageIdx, boolean used) throws IOException {
+        int k = pageIdx - 1;
+        int byteIdx = k / 8;
+        int bit = k % 8;
+        FileChannel ch = channel(fileIdx);
+        ByteBuffer one = ByteBuffer.allocate(1);
+        int r = ch.read(one, byteIdx);
+        int b = (r > 0) ? (one.get(0) & 0xFF) : 0;
+        if (used) b |= (1 << bit); else b &= ~(1 << bit);
+        one.clear();
+        one.put((byte) (b & 0xFF)).flip();
+        ch.write(one, byteIdx);
+        ch.force(false);
+    }
+
+    private void markPageUsed(int fileIdx, int pageIdx, boolean used) throws IOException {
+        if (pageIdx == 0)
+            throw new IllegalArgumentException("cannot mark meta page");
+        writeBitmapBit(fileIdx, pageIdx, used);
+    }
+
+    private int findFreePageInFile(int fileIdx) throws IOException {
+        FileChannel ch = channel(fileIdx);
+        ByteBuffer meta = ByteBuffer.allocate(cfg.getPagesize());
+        int r = ch.read(meta, 0);
+        if (r != cfg.getPagesize()) throw new EOFException("meta page incomplete");
+        meta.flip();
+
+        for (int byteIdx = 0; byteIdx < meta.limit(); byteIdx++) {
+            int b = meta.get(byteIdx) & 0xFF;
+            if (b != 0xFF) {
+                for (int bit = 0; bit < 8; bit++) {
+                    if ((b & (1 << bit)) == 0) {
+                        int candidate = 1 + (byteIdx * 8 + bit);
+                        ensurePageCapacity(fileIdx, candidate);
+                        return candidate;
+                    }
+                }
+            }
+        }
+        int next = computeNextPageIdx(fileIdx);
+        ensurePageCapacity(fileIdx, next);
+        return next;
     }
 }
