@@ -101,6 +101,18 @@ public class DiskManager implements AutoCloseable {
         }
     }
 
+    // ----------- Step 3D: DeallocPage -----------
+public void DeallocPage(PageId pid) throws IOException {
+    if (pid.getPageIdx() == 0) {
+        throw new IllegalArgumentException("Cannot deallocate meta page (page 0)");
+    }
+    if (!Files.exists(filePath(pid.getFileIdx()))) {
+        throw new IOException("File does not exist for " + pid);
+    }
+    // mark page as free in bitmap
+    markPageUsed(pid.getFileIdx(), pid.getPageIdx(), false);
+}
+
     // ----------- Helpers for files & bitmap -----------
     private Path filePath(int fileIdx) {
         return binDataDir.resolve("Data" + fileIdx + ".bin");
