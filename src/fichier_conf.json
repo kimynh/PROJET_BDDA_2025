@@ -1,0 +1,3 @@
+dbpath=DB 
+pagesize=4
+dm_maxfilecount=2
