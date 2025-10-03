@@ -1,5 +1,4 @@
 import java.io.EOFException;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -74,8 +73,35 @@ public class DiskManager implements AutoCloseable {
         throw new IOException("No more files available (dm_maxfilecount reached).");
     }
 
-    // ----------- Helpers for files & bitmap -----------
+    // ----------- Step 3C: WritePage / ReadPage -----------
+    public void WritePage(PageId pid, byte[] buff) throws IOException {
+        if (buff.length != cfg.getPagesize()) {
+            throw new IllegalArgumentException("Buffer size must equal pagesize (" + cfg.getPagesize() + ")");
+        }
+        ensureFileInitialized(pid.getFileIdx());
+        ensurePageCapacity(pid.getFileIdx(), pid.getPageIdx());
 
+        FileChannel ch = channel(pid.getFileIdx());
+        ByteBuffer bb = ByteBuffer.wrap(buff);
+        long offset = ((long) pid.getPageIdx()) * cfg.getPagesize();
+        ch.write(bb, offset);
+        ch.force(false);
+    }
+
+    public void ReadPage(PageId pid, byte[] buff) throws IOException {
+        if (buff.length != cfg.getPagesize()) {
+            throw new IllegalArgumentException("Buffer size must equal pagesize (" + cfg.getPagesize() + ")");
+        }
+        FileChannel ch = channel(pid.getFileIdx());
+        ByteBuffer bb = ByteBuffer.wrap(buff);
+        long offset = ((long) pid.getPageIdx()) * cfg.getPagesize();
+        int r = ch.read(bb, offset);
+        if (r != cfg.getPagesize()) {
+            throw new EOFException("Failed to read full page at " + pid);
+        }
+    }
+
+    // ----------- Helpers for files & bitmap -----------
     private Path filePath(int fileIdx) {
         return binDataDir.resolve("Data" + fileIdx + ".bin");
     }
