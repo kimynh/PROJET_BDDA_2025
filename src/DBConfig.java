@@ -14,6 +14,7 @@ public class DBConfig {
         this.dm_maxfilecount = dm_maxfilecount;
     }
 
+
     // Getters
     public String getDbpath() {
         return dbpath;
