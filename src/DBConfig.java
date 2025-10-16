@@ -6,14 +6,17 @@ public class DBConfig {
     private String dbpath;
     private int pagesize;
     private int dm_maxfilecount;
+    private int bm_buffercount;
+    private String bm_policy;
 
     // Constructor
-    public DBConfig(String dbpath, int pagesize, int dm_maxfilecount) {
+    public DBConfig(String dbpath, int pagesize, int dm_maxfilecount, int bm_buffercount, String bm_policy) {
         this.dbpath = dbpath;
         this.pagesize = pagesize;
         this.dm_maxfilecount = dm_maxfilecount;
+        this.bm_buffercount = bm_buffercount;
+        this.bm_policy = bm_policy;
     }
-
 
     // Getters
     public String getDbpath() {
@@ -26,6 +29,14 @@ public class DBConfig {
 
     public int getDm_maxfilecount() {
         return dm_maxfilecount;
+    }
+
+    public int getBm_buffercount(){
+        return bm_buffercount;
+    }
+
+    public String getBm_policy(){
+        return bm_policy;
     }
 
     // Setters
@@ -41,6 +52,15 @@ public class DBConfig {
         this.dm_maxfilecount = dm_maxfilecount;
     }
 
+    public void setBm_buffercount(int bm_buffercount){
+        this.bm_buffercount = bm_buffercount;
+    }
+
+    public void setBm_policy(String bm_policy){
+        this.bm_policy = bm_policy;
+    }
+
+
     // Methods
     public static DBConfig LoadDBConfig(String fichierConfig) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(fichierConfig))) {
@@ -48,6 +68,8 @@ public class DBConfig {
             String dbpath = null;
             Integer pagesize = null;
             Integer dm_maxfilecount = null;
+            Integer bm_buffercount = 20;
+            String bm_policy = "LRU";
 
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -73,6 +95,16 @@ public class DBConfig {
                     if (parts.length == 2) {
                         dm_maxfilecount = Integer.parseInt(parts[1].trim());
                     }
+                } else if (line.startsWith("bm_buffercount")){
+                    String[] parts = line.split("=", 2);
+                    if(parts.length == 2){
+                        bm_buffercount = Integer.parseInt(parts[1].trim());
+                    }
+                } else if (line.startsWith("bm_policy")){
+                    String[] parts = line.split("=", 2);
+                    if(parts.length == 2){
+                        bm_policy = parts[1].trim();
+                    }
                 }
             }
 
@@ -80,13 +112,13 @@ public class DBConfig {
                 throw new IllegalArgumentException("Le fichier de configuration est incomplet !");
             }
 
-            return new DBConfig(dbpath, pagesize, dm_maxfilecount);
+            return new DBConfig(dbpath, pagesize, dm_maxfilecount, bm_buffercount, bm_policy);
         }
     }
 
     @Override
     public String toString() {
         return "DBConfig{dbpath='" + dbpath + "', pagesize=" + pagesize +
-               ", dm_maxfilecount=" + dm_maxfilecount + "}";
+               ", dm_maxfilecount=" + dm_maxfilecount + "buffercount=" + bm_buffercount + "buffer manager policy" + bm_policy + "}";
     }
 }
