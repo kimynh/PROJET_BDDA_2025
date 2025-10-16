@@ -1,14 +1,15 @@
 public class TestBufferManager {
 		public static void main(String[] args) {
 			try {
-				DBConfig cfg = new DBConfig("/tmp/db", 512, 5, 3, "LRU");
+				DBConfig cfg = new DBConfig("db", 100, 5, 3, "LRU");
 				DiskManager dm = new DiskManager(cfg); // ton implémentation existante
+				dm.Init(); // Création automatique des dossiers nécessaires
 				BufferManager bm = new BufferManager(cfg, dm);
 
-				PageId p1 = new PageId(1, 1);
-				PageId p2 = new PageId(1, 2);
-				PageId p3 = new PageId(1, 3);
-				PageId p4 = new PageId(1, 4);
+				PageId p1 = dm.AllocPage();
+				PageId p2 = dm.AllocPage();
+				PageId p3 = dm.AllocPage();
+				PageId p4 = dm.AllocPage();
 
 				bm.GetPage(p1);
 				bm.GetPage(p2);
