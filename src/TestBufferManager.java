@@ -29,6 +29,7 @@ public class TestBufferManager {
 				System.out.println("✅ Test terminé avec succès.");
 					} catch (Exception e) {
 							e.printStackTrace();
+                            System.out.println("Erreur : " + e.getMessage());
 					}
 			}
 }
