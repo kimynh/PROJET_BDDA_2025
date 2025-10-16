@@ -111,6 +111,19 @@ public class BufferManager {
     }
 
     // ---------------------------------------------------
+    // ÉTAT DU BUFFER
+    // ---------------------------------------------------
+    public void printState() {
+        System.out.println("=== BufferManager State ===");
+        for (int i = 0; i < pageIds.length; i++) {
+            System.out.println("Slot " + i + ": " +
+                    (pageIds[i] == null ? "EMPTY" : pageIds[i]) +
+                    " pin=" + pinCount[i] +
+                    " dirty=" + dirty[i]);
+        }
+    }
+
+    // ---------------------------------------------------
     // OUTILS INTERNES
     // ---------------------------------------------------
 
