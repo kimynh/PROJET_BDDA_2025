@@ -1,22 +1,24 @@
+import java.io.IOException;
+
 public class TestRelationCatalog {
-    public static void main(String[] args) {
-        Relation student = new Relation("Student");
-        student.addColumn("id", "int");
-        student.addColumn("name", "string");
-        student.addColumn("grade", "float");
+    public static void main(String[] args) throws IOException {
+        DBConfig cfg = DBConfig.LoadDBConfig("src/fichier_conf.json");
+        DiskManager dm = new DiskManager(cfg);
+        BufferManager bm = new BufferManager(cfg, dm);
+        dm.Init();
 
-        Relation teacher = new Relation("Teacher");
-        teacher.addColumn("id", "int");
-        teacher.addColumn("name", "string");
+        RelationCatalog catalog = new RelationCatalog(dm, bm, cfg);
 
-        RelationCatalog catalog = new RelationCatalog();
-        catalog.addRelation(student);
-        catalog.addRelation(teacher);
+        Relation r1 = new Relation("students");
+        r1.addColumn("id", "int");
+        r1.addColumn("name", "string");
+        r1.addColumn("grade", "float");
+
+        catalog.addRelation(r1);
 
         System.out.println(catalog);
 
-        Relation found = catalog.getRelation("Student");
-        System.out.println("Found relation: " + found);
+        dm.Finish();
+        bm.FlushBuffers();
     }
 }
-
