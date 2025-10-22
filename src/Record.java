@@ -9,10 +9,7 @@ public class Record {
         this.values = new ArrayList<>();
     }
 
-    public Record(List<String> values) {
-        this.values = new ArrayList<>(values);
-    }
-
+    // ✅ Allow creating from array of Strings
     public Record(String[] valuesArray) {
         this.values = new ArrayList<>();
         for (String v : valuesArray) {
@@ -20,29 +17,32 @@ public class Record {
         }
     }
 
-    // --- Getters & Setters ---
-    public List<String> getValues() {
-        return values;
-    }
-
-    public void setValues(List<String> values) {
+    public Record(List<String> values) {
         this.values = values;
     }
 
+    // --- Methods ---
     public void addValue(String value) {
-        this.values.add(value);
-    }
-
-    public String getValue(int index) {
-        return values.get(index);
+        values.add(value);
     }
 
     public int size() {
         return values.size();
     }
 
+    public String getValue(int index) {
+        return values.get(index);
+    }
+
+    public List<String> getValues() {
+        return values;
+    }
+
     @Override
     public String toString() {
-        return "Record" + values;
+        return values.toString();
     }
 }
+
+
+
