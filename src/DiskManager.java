@@ -214,4 +214,8 @@ public void DeallocPage(PageId pid) throws IOException {
         ensurePageCapacity(fileIdx, next);
         return next;
     }
+
+    public DBConfig getConfig(){
+        return cfg;
+    }
 }
