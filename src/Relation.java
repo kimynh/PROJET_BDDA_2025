@@ -1,12 +1,24 @@
 import java.util.ArrayList;
 import java.util.List;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Relation {
     private String name;
     private List<String> columnNames;
     private List<String> columnTypes;
     private int recordSize; // total bytes per record
+    
+    // Ajout des variables membres
+    private PageId headerPageId;
+    private int nbSlotPerPage;
+    private DiskManager diskManager;
+    private BufferManager bufferManager;
+
+    private List<PageId> pagesWithFreeSpace = new ArrayList<>();
+    private Map<PageId, Integer> freeSlots = new HashMap<>();
+    private Map<PageId, Integer> nextFreeSlotIndex = new HashMap<>();
 
     // --- Constructor ---
     public Relation(String name) {
