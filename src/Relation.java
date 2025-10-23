@@ -16,22 +16,26 @@ public class Relation {
     private int nbSlotsPerPage;
     private DiskManager diskManager;
     private BufferManager bufferManager;
+    private DBConfig config;
 
     private List<PageId> pagesWithFreeSpace = new ArrayList<>();
     private Map<PageId, Integer> freeSlots = new HashMap<>();
     private Map<PageId, Integer> nextFreeSlotIndex = new HashMap<>();
 
-    // --- Constructor ---
-    public Relation(String name, PageId headerPageId, DiskManager dm, BufferManager bm, int nbSlotsPerPage) {
+    public Relation(String name, DiskManager diskManager, BufferManager bufferManager, DBConfig config) {
         this.name = name;
         this.columnNames = new ArrayList<>();
         this.columnTypes = new ArrayList<>();
         this.recordSize = 0;
-        this.nbSlotsPerPage = nbSlotsPerPage;
-        this.headerPageId = headerPageId;
-        this.diskManager = dm;
-        this.bufferManager = bm;
+        
+        // Références vers les instances existantes
+        this.diskManager = diskManager;
+        this.bufferManager = bufferManager;
+        this.config = config;
+        this.headerPageId = null; // sera initialisé plus tard
+        this.nbSlotsPerPage = 0; // sera calculé en fonction de recordSize et pageSize
     }
+
 
     // --- Add a column ---
     public void addColumn(String columnName, String type) {
@@ -67,6 +71,31 @@ public class Relation {
 
     public int getRecordSize() {
         return recordSize;
+    }
+
+    public PageId getHeaderPageId() {
+        return headerPageId;
+    }
+
+    public int getNbSlotsPerPage() {
+        return nbSlotsPerPage;
+    }
+
+    // --- Calcule le nombre de slots par page ---
+    public void calculateNbSlotsPerPage() {
+        if (recordSize > 0 && config != null) {
+            int pageSize = config.getPagesize();
+            // Reserve some space for page metadata (e.g., 4 bytes for slot count)
+            int usableSpace = pageSize - 4;
+            this.nbSlotsPerPage = usableSpace / recordSize;
+        }
+    }
+
+    // --- Initialise la header page ---
+    public void initializeHeaderPage() throws IOException {
+        if (diskManager != null && headerPageId == null) {
+            this.headerPageId = diskManager.AllocPage();
+        }
     }
 
     @Override
@@ -131,6 +160,8 @@ public class Relation {
         nextFreeSlotIndex.put(newPid, 0);
         System.out.println("addDataPage : allocated " + newPid + " with " + nbSlotsPerPage + " slots.");
     }
+
+
 
 }
 
