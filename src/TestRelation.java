@@ -1,6 +1,6 @@
 public class TestRelation {
     public static void main(String[] args) throws Exception {
-        DBConfig cfg = DBConfig.LoadDBConfig("src/fichier_conf.json");
+        DBConfig cfg = DBConfig.LoadDBConfig("fichier_conf.json");
         DiskManager dm = new DiskManager(cfg);
         BufferManager bm = new BufferManager(cfg, dm);
         dm.Init();
