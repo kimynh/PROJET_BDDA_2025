@@ -2,6 +2,4 @@
 "dbpath":"DB",
 "pagesize":4096,
 "dm_maxfilecount":32
-
-
 }
