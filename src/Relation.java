@@ -181,7 +181,7 @@ public class Relation {
     
     return new RecordId(pageId, slotIndex);
     }
-    
+
     public ArrayList<Record> getRecordsInDataPage(PageId pageId) throws IOException {
     ArrayList<Record> records = new ArrayList<>();
     
@@ -201,10 +201,26 @@ public class Relation {
     }
     
     // Libérer la page après lecture
-    bufferManager.FreePage(pageId, false);
+        bufferManager.FreePage(pageId, false);
     
-    return records;
-}
+        return records;
+        }
+
+    public PageId getFreeDataPageId(int sizeRecord) {
+    // on suppose que sizeRecord == recordSize ; sinon il faudrait convertir en slots
+        if (sizeRecord > recordSize) {
+        // record trop gros pour tenir dans une case standard
+            return null;
+        }
+        for (PageId pid : pagesWithFreeSpace) {
+            Integer remaining = freeSlots.get(pid);
+            if (remaining != null && remaining > 0) {
+                return pid;
+            }
+        }
+        return null; // aucune page avec de la place
+    }
+
 
 }
 
