@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 import java.util.List;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -12,7 +13,7 @@ public class Relation {
     
     // Ajout des variables membres
     private PageId headerPageId;
-    private int nbSlotPerPage;
+    private int nbSlotsPerPage;
     private DiskManager diskManager;
     private BufferManager bufferManager;
 
@@ -21,12 +22,12 @@ public class Relation {
     private Map<PageId, Integer> nextFreeSlotIndex = new HashMap<>();
 
     // --- Constructor ---
-    public Relation(String name, PageId headerPageId, DiskManager dm, BufferManager bm, int nbSlotPerPage) {
+    public Relation(String name, PageId headerPageId, DiskManager dm, BufferManager bm, int nbSlotsPerPage) {
         this.name = name;
         this.columnNames = new ArrayList<>();
         this.columnTypes = new ArrayList<>();
         this.recordSize = 0;
-        this.nbSlotPerPage = nbSlotPerPage;
+        this.nbSlotsPerPage = nbSlotsPerPage;
         this.headerPageId = headerPageId;
         this.diskManager = dm;
         this.bufferManager = bm;
@@ -122,5 +123,14 @@ public class Relation {
             }
         }
     }
+
+    public void addDataPage() throws IOException{
+        PageId newPid = diskManager.AllocPage();
+        pagesWithFreeSpace.add(newPid);
+        freeSlots.put(newPid, nbSlotsPerPage);
+        nextFreeSlotIndex.put(newPid, 0);
+        System.out.println("addDataPage : allocated " + newPid + " with " + nbSlotsPerPage + " slots.");
+    }
+
 }
 
