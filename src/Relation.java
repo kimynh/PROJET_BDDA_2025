@@ -161,7 +161,50 @@ public class Relation {
         System.out.println("addDataPage : allocated " + newPid + " with " + nbSlotsPerPage + " slots.");
     }
 
-
+    public RecordId writeRecordToDataPage(Record record, PageId pageId) throws IOException {
+    // Convertir le byte[] en ByteBuffer
+    byte[] pageContent = bufferManager.GetPage(pageId);
+    ByteBuffer buffer = ByteBuffer.wrap(pageContent);
+    
+    // Le reste de la méthode reste identique
+    int slotIndex = nextFreeSlotIndex.get(pageId);
+    int offset = slotIndex * recordSize;
+    
+    writeRecordToBuffer(record, buffer, offset);
+    
+    nextFreeSlotIndex.put(pageId, slotIndex + 1);
+    
+    int remainingSlots = freeSlots.get(pageId);
+    freeSlots.put(pageId, remainingSlots - 1);
+    
+    bufferManager.FreePage(pageId, true);
+    
+    return new RecordId(pageId, slotIndex);
+    }
+    
+    public ArrayList<Record> getRecordsInDataPage(PageId pageId) throws IOException {
+    ArrayList<Record> records = new ArrayList<>();
+    
+    // Récupérer le contenu de la page
+    byte[] pageContent = bufferManager.GetPage(pageId);
+    ByteBuffer buffer = ByteBuffer.wrap(pageContent);
+    
+    // Récupérer le nombre de records dans cette page
+    int nbRecords = nextFreeSlotIndex.get(pageId);
+    
+    // Lire chaque record de la page
+    for (int i = 0; i < nbRecords; i++) {
+        Record record = new Record();
+        int offset = i * recordSize;
+        readFromBuffer(record, buffer, offset);
+        records.add(record);
+    }
+    
+    // Libérer la page après lecture
+    bufferManager.FreePage(pageId, false);
+    
+    return records;
+}
 
 }
 
