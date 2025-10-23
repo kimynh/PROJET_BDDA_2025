@@ -1,4 +1,7 @@
-dbpath=DB
-pagesize=4096
-dm_maxfilecount=32
+{
+"dbpath":"DB",
+"pagesize":4096,
+"dm_maxfilecount":32
 
+
+}
