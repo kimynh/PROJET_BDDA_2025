@@ -9,7 +9,7 @@ public class TestRelationCatalog {
 
         RelationCatalog catalog = new RelationCatalog(dm, bm, cfg);
 
-        Relation r1 = new Relation("students");
+        Relation r1 = new Relation("students", dm, bm, cfg);
         r1.addColumn("id", "int");
         r1.addColumn("name", "string");
         r1.addColumn("grade", "float");
