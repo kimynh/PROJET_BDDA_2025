@@ -6,7 +6,7 @@ public class TestHeapFile {
         BufferManager bm = new BufferManager(cfg, dm); // ✅ fix: pass dm too
 
         // --- Create a relation (table schema) ---
-        Relation rel = new Relation("Students");
+        Relation rel = new Relation("Students", dm, bm, cfg);
         rel.addColumn("ID", "int");
         rel.addColumn("Name", "string");
         rel.addColumn("Grade", "float");
