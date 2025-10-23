@@ -18,7 +18,7 @@ public class RelationCatalog {
         this.relations = new ArrayList<>();
 
         // System catalog relation
-        Relation catalogRelation = new Relation("catalog");
+        Relation catalogRelation = new Relation("catalog", dm, bm, cfg);
         catalogRelation.addColumn("name", "string");
 
         this.catalogFile = new HeapFile(catalogRelation, dm, bm);
@@ -64,7 +64,7 @@ public class RelationCatalog {
                 if (!name.isEmpty()) {
                     // Only add if not already in memory
                     if (getRelation(name) == null) {
-                        Relation r = new Relation(name);
+                        Relation r = new Relation(name, diskManager, bufferManager, config);
                         relations.add(r);
                         System.out.println("✅ Loaded relation: " + name);
                     }
