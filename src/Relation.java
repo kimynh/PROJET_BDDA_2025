@@ -21,11 +21,15 @@ public class Relation {
     private Map<PageId, Integer> nextFreeSlotIndex = new HashMap<>();
 
     // --- Constructor ---
-    public Relation(String name) {
+    public Relation(String name, PageId headerPageId, DiskManager dm, BufferManager bm, int nbSlotPerPage) {
         this.name = name;
         this.columnNames = new ArrayList<>();
         this.columnTypes = new ArrayList<>();
         this.recordSize = 0;
+        this.nbSlotPerPage = nbSlotPerPage;
+        this.headerPageId = headerPageId;
+        this.diskManager = dm;
+        this.bufferManager = bm;
     }
 
     // --- Add a column ---
