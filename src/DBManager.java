@@ -1,5 +1,11 @@
 
+import java.io.*;
+import java.lang.reflect.Field;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Set;
 
 public class DBManager{
     private final DBConfig config;
@@ -31,7 +37,7 @@ public class DBManager{
     public void RemoveAllTables(){
         tables.clear();
     }
-// Afficher le schema d'une table au format nomTable (colonne1:type1, colonne2:type2, ...)
+    // Afficher le schema d'une table au format nomTable (colonne1:type1, colonne2:type2, ...)
 
     public void DescribeTable(String nomTable) {
         Relation r = tables.get(nomTable);
@@ -47,7 +53,7 @@ public class DBManager{
         sb.append(")");
         System.out.println(sb.toString());
     }
-// Afficher le schema de toutes les tables
+    // Afficher le schema de toutes les tables
 
     public void DescribeAllTables(){
         for (String  nomtable : tables.keySet()){
@@ -56,5 +62,118 @@ public class DBManager{
         }
     }
 
+    // Methode Pour sauvegarder l'etat de la base de donnees dans un fichier
 
+     public void SaveState() {
+        File dir = new File(config.getDbpath());
+        if (!dir.exists()) dir.mkdirs();
+        File saveFile = new File(dir, "database.save");
+
+        try (BufferedWriter w = new BufferedWriter(new FileWriter(saveFile))) {
+            for (Relation r : tables.values()) {
+                w.write("START_TABLE");
+                w.newLine();
+                w.write("name=" + r.getName());
+                w.newLine();
+                // columns
+                StringBuilder cols = new StringBuilder();
+                List<String> names = r.getColumnNames();
+                List<String> types = r.getColumnTypes();
+                for (int i = 0; i < names.size(); i++) {
+                    if (i > 0) cols.append(",");
+                    cols.append(names.get(i)).append(":").append(types.get(i));
+                }
+                w.write("columns=" + cols.toString());
+                w.newLine();
+                // header page id
+                PageId hp = r.getHeaderPageId();
+                if (hp == null) {
+                    w.write("header=null");
+                                    } else {
+                    w.write("header=" + hp.getFileIdx() + "," + hp.getPageIdx());
+                }
+                w.newLine();
+                w.write("END_TABLE");
+                w.newLine();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to save DB state: " + e.getMessage(), e);
+        }
+    }
+
+    public void LoadState() {
+        File dir = new File(config.getDbpath());
+        File saveFile = new File(dir, "database.save");
+        if (!saveFile.exists()) return;
+
+        LinkedHashMap<String, Relation> loaded = new LinkedHashMap<>();
+
+        try (BufferedReader r = new BufferedReader(new FileReader(saveFile))) {
+            String line;
+            String name = null;
+            String columns = null;
+            String header = null;
+            while ((line = r.readLine()) != null) {
+                if (line.equals("START_TABLE")) {
+                    name = null;
+                    columns = null;
+                    header = null;
+                } else if (line.startsWith("name=")) {
+                    name = line.substring("name=".length());
+                } else if (line.startsWith("columns=")) {
+                    columns = line.substring("columns=".length());
+                } else if (line.startsWith("header=")) {
+                    header = line.substring("header=".length());
+                 } else if (line.equals("END_TABLE")) {
+                    if (name == null) continue;
+                    // create Relation. pass null disk/buffer managers and config (schema-only)
+                    Relation rel = new Relation(name, null, null, config);
+                    if (columns != null && !columns.isEmpty()) {
+                        String[] cols = columns.split(",");
+                        for (String c : cols) {
+                            int idx = c.indexOf(':');
+                            if (idx > 0) {
+                                String cname = c.substring(0, idx);
+                                String ctype = c.substring(idx + 1);
+                                rel.addColumn(cname, ctype);
+                            }
+                        }
+                    }
+                    // set headerPageId via reflection if present
+                    if (header != null && !header.equals("null")) {
+                        String[] parts = header.split(",");
+                        if (parts.length == 2) {
+                            try {
+                                 int fileIdx = Integer.parseInt(parts[0]);
+                                int pageIdx = Integer.parseInt(parts[1]);
+                                PageId pid = new PageId(fileIdx, pageIdx);
+                                try {
+                                    Field f = Relation.class.getDeclaredField("headerPageId");
+                                    f.setAccessible(true);
+                                    f.set(rel, pid);
+                                } catch (NoSuchFieldException | IllegalAccessException ex) {
+                                    // ignore reflection issues, continue without header set
+                                }
+                            } catch (NumberFormatException ignore) { }
+                        }
+                    }
+                    loaded.put(name, rel);
+                }
+            }
+            // replace current tables with loaded
+            tables.clear();
+            tables.putAll(loaded);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load DB state: " + e.getMessage(), e);
+        }
+    }
+
+    // For tests or external use
+    public Collection<Relation> getAllRelations() {
+        return Collections.unmodifiableCollection(tables.values());
+    }
+
+        public Set<String> getAllTableNames() {
+        return Collections.unmodifiableSet(tables.keySet());
+    }
 }

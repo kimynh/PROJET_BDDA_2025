@@ -1,0 +1,5 @@
+START_TABLE
+name=R
+columns=X:INT,Y:FLOAT
+header=null
+END_TABLE
