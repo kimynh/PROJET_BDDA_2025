@@ -31,4 +31,30 @@ public class DBManager{
     public void RemoveAllTables(){
         tables.clear();
     }
+// Afficher le schema d'une table au format nomTable (colonne1:type1, colonne2:type2, ...)
+
+    public void DescribeTable(String nomTable) {
+        Relation r = tables.get(nomTable);
+        if (r == null) return;
+        StringBuilder sb = new StringBuilder();
+        sb.append(r.getName()).append(" (");
+        List<String> names = r.getColumnNames();
+        List<String> types = r.getColumnTypes();
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append(names.get(i)).append(":").append(types.get(i));
+        }
+        sb.append(")");
+        System.out.println(sb.toString());
+    }
+// Afficher le schema de toutes les tables
+
+    public void DescribeAllTables(){
+        for (String  nomtable : tables.keySet()){
+            DescribeTable(nomtable);
+      
+        }
+    }
+
+
 }
