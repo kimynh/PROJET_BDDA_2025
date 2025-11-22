@@ -147,6 +147,7 @@ public class DBManager{
                             }
                         }
                     }
+                    boolean headerSet = false;
                     // set headerPageId via reflection if present
                     if (header != null && !header.equals("null")) {
                         String[] parts = header.split(",");
@@ -159,12 +160,44 @@ public class DBManager{
                                     Field f = Relation.class.getDeclaredField("headerPageId");
                                     f.setAccessible(true);
                                     f.set(rel, pid);
+                                    headerSet = true;
                                 } catch (NoSuchFieldException | IllegalAccessException ex) {
                                     // ignore reflection issues, continue without header set
                                 }
                             } catch (NumberFormatException ignore) { }
                         }
                     }
+                    
+                                        // if header was not set from the file, try to initialize a header page if possible
+                    if (!headerSet) {
+                        // Prefer calling a proper initializer if Relation provides it
+                        try {
+                            if (diskManager != null && bufferManager != null) {
+                                try {
+                                    java.lang.reflect.Method init = Relation.class.getMethod("initializeHeaderPage");
+                                    init.invoke(rel);
+                                    headerSet = true;
+                                } catch (NoSuchMethodException ns) {
+                                    // method not present, fall back to field set
+                                }
+                            }
+                        } catch (Throwable t) {
+                            // ignore init errors and fall back
+                        }
+
+                        if (!headerSet) {
+                            // final fallback: set a placeholder PageId so relation is consistent
+                            try {
+                                Field f = Relation.class.getDeclaredField("headerPageId");
+                                f.setAccessible(true);
+                                f.set(rel, new PageId(-1, -1));
+                                headerSet = true;
+                            } catch (NoSuchFieldException | IllegalAccessException ex) {
+                                // if even this fails, leave relation without header and continue
+                            }
+                        }
+                    }
+                    
                     loaded.put(name, rel);
                 }
             }

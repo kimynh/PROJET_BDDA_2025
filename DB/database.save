@@ -1,5 +1,5 @@
 START_TABLE
 name=R
 columns=X:INT,Y:FLOAT
-header=null
+header=0,6
 END_TABLE
