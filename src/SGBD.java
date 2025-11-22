@@ -349,22 +349,29 @@ public class SGBD {
         }
     }
     
-    // === DESCRIBE nomTable ===
+    // === DESCRIBE TABLE nomTable ou DESCRIBE TABLES ===
     public void ProcessDescribeCommand(String[] tokens) {
         try {
             if (tokens.length < 2) {
-                System.err.println("Syntaxe: DESCRIBE nomTable");
+                System.err.println("Syntaxe: DESCRIBE TABLE nomTable ou DESCRIBE TABLES");
                 return;
             }
             
-            String tableName = tokens[1];
-            
-            if (tableName.equals("*")) {
-                // Décrire toutes les tables
+            if (tokens.length >= 3 && tokens[1].equalsIgnoreCase("TABLE")) {
+                // DESCRIBE TABLE nomTable
+                String tableName = tokens[2];
+                dbManager.DescribeTable(tableName);
+            } else if (tokens[1].equalsIgnoreCase("TABLES")) {
+                // DESCRIBE TABLES
                 dbManager.DescribeAllTables();
             } else {
-                // Décrire une table spécifique
-                dbManager.DescribeTable(tableName);
+                // Pour compatibilité : DESCRIBE nomTable ou DESCRIBE *
+                String tableName = tokens[1];
+                if (tableName.equals("*")) {
+                    dbManager.DescribeAllTables();
+                } else {
+                    dbManager.DescribeTable(tableName);
+                }
             }
             
         } catch (Exception e) {
