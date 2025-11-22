@@ -137,6 +137,10 @@ public void DeallocPage(PageId pid) throws IOException {
             throw new IOException("fileIdx >= dm_maxfilecount");
         try (RandomAccessFile raf = new RandomAccessFile(p.toFile(), "rw")) {
             raf.setLength(cfg.getPagesize()); // page 0 = meta/bitmap
+            // Initialiser la meta page avec des zéros
+            byte[] zeros = new byte[cfg.getPagesize()];
+            raf.seek(0);
+            raf.write(zeros);
         }
     }
 
