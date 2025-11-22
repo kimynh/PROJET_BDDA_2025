@@ -9,13 +9,21 @@ import java.util.Set;
 
 public class DBManager{
     private final DBConfig config;
-    private  final LinkedHashMap<String,Relation> tables;
+    private final LinkedHashMap<String,Relation> tables;
+    private DiskManager diskManager;
+    private BufferManager bufferManager;
 
 //Constructeur 
     public DBManager(DBConfig config){
         this.config=config;
         this.tables =new LinkedHashMap<>();
-            }
+    }
+    
+    // Méthode pour définir les managers après construction
+    public void setManagers(DiskManager diskManager, BufferManager bufferManager) {
+        this.diskManager = diskManager;
+        this.bufferManager = bufferManager;
+    }
     
 // Methode Pour ajouter une table
     public void addTable(Relation tab){
@@ -126,8 +134,8 @@ public class DBManager{
                     header = line.substring("header=".length());
                  } else if (line.equals("END_TABLE")) {
                     if (name == null) continue;
-                    // create Relation. pass null disk/buffer managers and config (schema-only)
-                    Relation rel = new Relation(name, null, null, config);
+                    // create Relation with proper managers if available
+                    Relation rel = new Relation(name, diskManager, bufferManager, config);
                     if (columns != null && !columns.isEmpty()) {
                         String[] cols = columns.split(",");
                         for (String c : cols) {
