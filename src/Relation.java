@@ -215,7 +215,28 @@ public class Relation {
     }
 
     private int getTypeSize(String type) {
-        return switch (type.toLowerCase()) {
+        String lowerType = type.toLowerCase();
+        
+        // Gestion des types avec taille variable comme CHAR(n), VARCHAR(n)
+        if (lowerType.startsWith("char(") && lowerType.endsWith(")")) {
+            try {
+                String sizeStr = lowerType.substring(5, lowerType.length() - 1);
+                return Integer.parseInt(sizeStr);
+            } catch (NumberFormatException e) {
+                return 1; // fallback
+            }
+        }
+        
+        if (lowerType.startsWith("varchar(") && lowerType.endsWith(")")) {
+            try {
+                String sizeStr = lowerType.substring(8, lowerType.length() - 1);
+                return Integer.parseInt(sizeStr);
+            } catch (NumberFormatException e) {
+                return 20; // fallback
+            }
+        }
+        
+        return switch (lowerType) {
             case "int" -> 4;
             case "float" -> 4;
             case "double" -> 8;
