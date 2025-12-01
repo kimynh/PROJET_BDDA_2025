@@ -146,6 +146,7 @@ public class DBManager{
                                 rel.addColumn(cname, ctype);
                             }
                         }
+                        rel.calculateNbSlotsPerPage();
                     }
                     boolean headerSet = false;
                     // set headerPageId via reflection if present
