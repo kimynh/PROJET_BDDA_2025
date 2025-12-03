@@ -266,30 +266,45 @@ public class Relation {
         }
     }
 
-    public void addDataPage() throws IOException {
+        public void addDataPage() throws IOException {
         PageId newPid = diskManager.AllocPage();
         byte[] content = bufferManager.GetPage(newPid);
         ByteBuffer buffer = ByteBuffer.wrap(content);
-        buffer.position(DP_OFFSET_BYTEMAP);
-        for (int i = 0; i < nbSlotsPerPage; i++) {
-            buffer.put((byte) 0);
+
+        // --- FIX: Zero-initialize entire data page (important for persistence) ---
+        for (int i = 0; i < content.length; i++) {
+            buffer.put(i, (byte) 0);
         }
+
+        // --- Initialize metadata in the new data page ---
+        writePageIdToBuffer(buffer, DP_OFFSET_PREV, DUMMY_PAGE_ID);
+        writePageIdToBuffer(buffer, DP_OFFSET_NEXT, DUMMY_PAGE_ID);
+
+        // --- Initialize BYTEMAP (mark all slots empty) ---
+        for (int i = 0; i < nbSlotsPerPage; i++) {
+            buffer.put(DP_OFFSET_BYTEMAP + i, (byte) 0);
+        }
+
+        bufferManager.FreePage(newPid, true);
+
+        // --- Insert this new page at the head of FREE list ---
         byte[] headerContent = bufferManager.GetPage(headerPageId);
         ByteBuffer headerBuffer = ByteBuffer.wrap(headerContent);
+
         PageId oldFirstFree = readPageIdFromBuffer(headerBuffer, HP_OFFSET_FIRST_FREE);
         writePageIdToBuffer(headerBuffer, HP_OFFSET_FIRST_FREE, newPid);
         bufferManager.FreePage(headerPageId, true);
-        writePageIdToBuffer(buffer, DP_OFFSET_PREV, DUMMY_PAGE_ID);
-        writePageIdToBuffer(buffer, DP_OFFSET_NEXT, oldFirstFree);
+
+        // --- Fix links between pages ---
         if (!oldFirstFree.equals(DUMMY_PAGE_ID)) {
-            byte[] oldFreeContent = bufferManager.GetPage(oldFirstFree);
-            ByteBuffer oldFreeBuffer = ByteBuffer.wrap(oldFreeContent);
-            writePageIdToBuffer(oldFreeBuffer, DP_OFFSET_PREV, newPid);
-            // ✅ **FIXED**: Pass the PageId, not its content
+            byte[] oldContent = bufferManager.GetPage(oldFirstFree);
+            ByteBuffer oldBuffer = ByteBuffer.wrap(oldContent);
+            writePageIdToBuffer(oldBuffer, DP_OFFSET_PREV, newPid);
             bufferManager.FreePage(oldFirstFree, true);
         }
-        bufferManager.FreePage(newPid, true);
     }
+
+
 
     public PageId getFreeDataPageId(int sizeRecord) throws IOException {
         if (sizeRecord > recordSize)

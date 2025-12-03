@@ -1,5 +1,10 @@
 START_TABLE
-name=R
-columns=X:INT,Y:FLOAT
-header=0,6
+name=t1
+columns=a:INT
+header=0,1
+END_TABLE
+START_TABLE
+name=t2
+columns=x:FLOAT
+header=0,2
 END_TABLE
