@@ -147,6 +147,9 @@ public class DBManager{
                             }
                         }
                     }
+                    // Calculate nbSlotsPerPage after adding all columns
+                    rel.calculateNbSlotsPerPage();
+                    
                     boolean headerSet = false;
                     // set headerPageId via reflection if present
                     if (header != null && !header.equals("null")) {
