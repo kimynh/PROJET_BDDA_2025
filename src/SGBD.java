@@ -89,6 +89,9 @@ public class SGBD {
             case "LIST" -> ProcessListCommand(tokens);
             case "BMSETTINGS" -> ProcessBmSettingsCommand(tokens);
             case "BMSTATE" -> ProcessBmStateCommand(tokens);
+            case "IMPORT" -> ProcessImportCommand(tokens);
+            case "APPEND" -> ProcessAppendCommand(tokens);
+            case "UPDATE" -> ProcessUpdateCommand(tokens);
             default -> System.err.println("Commande inconnue: " + mainCommand);
         }
     }
@@ -268,7 +271,7 @@ public class SGBD {
             // Créer un record
             Record record = new Record();
             for (String value : values) {
-                record.addValue(value.trim());
+                record.addValue(cleanValue(value));
             }
             
             // Insérer le record
@@ -285,67 +288,139 @@ public class SGBD {
     public void ProcessSelectCommand(String[] tokens) {
         try {
             if (tokens.length < 4 || !tokens[1].equals("*") || !tokens[2].equalsIgnoreCase("FROM")) {
-                System.err.println("Syntaxe: SELECT * FROM nomTable");
+                System.err.println("Syntaxe: SELECT * FROM Table1 [, Table2] [WHERE ...]");
                 return;
             }
-            
-            String tableName = tokens[3];
-            Relation relation = dbManager.getTable(tableName);
-            
-            if (relation == null) {
-                System.err.println("La table '" + tableName + "' n'existe pas");
-                return;
+
+            // Reconstruct command to parse easier
+            StringBuilder sb = new StringBuilder();
+            for (int i = 3; i < tokens.length; i++) sb.append(tokens[i]).append(" ");
+            String rest = sb.toString().trim();
+
+            String fromClause = rest;
+            String whereClause = "";
+
+            if (rest.toUpperCase().contains(" WHERE ")) {
+                String[] parts = rest.toUpperCase().split(" WHERE ");
+                fromClause = rest.substring(0, rest.toUpperCase().indexOf(" WHERE ")).trim();
+                whereClause = rest.substring(rest.toUpperCase().indexOf(" WHERE ") + 7).trim();
             }
-            
-            // Récupérer tous les records
-            ArrayList<Record> records = relation.GetAllRecords();
-            
-            // Afficher les résultats
-            if (records.isEmpty()) {
-                System.out.println("Aucun enregistrement trouvé");
-            } else {
-                // Afficher l'en-tête
-                System.out.println("Contenu de la table '" + tableName + "':");
-                
-                // Afficher les records
-                for (Record record : records) {
-                    System.out.println(record);
+
+            String[] tableNames = fromClause.split(",");
+            for(int i=0; i<tableNames.length; i++) tableNames[i] = tableNames[i].trim();
+
+            // --- SINGLE TABLE SELECT ---
+            if (tableNames.length == 1) {
+                String tableName = tableNames[0];
+                Relation relation = dbManager.getTable(tableName);
+                if (relation == null) {
+                    System.err.println("Table inconnue: " + tableName);
+                    return;
                 }
+                ArrayList<Record> records = relation.GetAllRecords();
+                int count = 0;
                 
-                System.out.println("Total: " + records.size() + " enregistrement(s)");
+                for (Record r : records) {
+                    if (evaluateCondition(r, relation, whereClause)) {
+                        System.out.println(r);
+                        count++;
+                    }
+                }
+                System.out.println("Total selected records=" + count);
             }
-            
+
+            // --- JOIN (NESTED LOOP) ---
+            else if (tableNames.length == 2) {
+                String name1 = tableNames[0];
+                String name2 = tableNames[1];
+                Relation rel1 = dbManager.getTable(name1);
+                Relation rel2 = dbManager.getTable(name2);
+
+                if (rel1 == null || rel2 == null) {
+                    System.err.println("Une des tables n'existe pas.");
+                    return;
+                }
+
+                // Parse WHERE: T1.Col = T2.Col
+                int idx1 = -1, idx2 = -1;
+                
+                if (whereClause.contains("=")) {
+                    String[] cond = whereClause.split("=");
+                    String left = cond[0].trim();  // e.g. S.C1
+                    String right = cond[1].trim(); // e.g. R.C1
+
+                    // Helper to find index
+                    if(left.startsWith(name1 + ".")) idx1 = rel1.getColumnNames().indexOf(left.split("\\.")[1]);
+                    else if(left.startsWith(name2 + ".")) idx2 = rel2.getColumnNames().indexOf(left.split("\\.")[1]);
+
+                    if(right.startsWith(name1 + ".")) idx1 = rel1.getColumnNames().indexOf(right.split("\\.")[1]);
+                    else if(right.startsWith(name2 + ".")) idx2 = rel2.getColumnNames().indexOf(right.split("\\.")[1]);
+                }
+
+                if (idx1 == -1 || idx2 == -1) {
+                    System.err.println("Erreur: Colonnes de jointure introuvables ou syntaxe incorrecte (utilisez Table.Col = Table.Col)");
+                    return;
+                }
+
+                // Execute Nested Loop
+                ArrayList<Record> recs1 = rel1.GetAllRecords();
+                ArrayList<Record> recs2 = rel2.GetAllRecords();
+                int count = 0;
+
+                for (Record r1 : recs1) {
+                    for (Record r2 : recs2) {
+                        if (r1.getValues().get(idx1).equals(r2.getValues().get(idx2))) {
+                            System.out.println(r1 + " ; " + r2);
+                            count++;
+                        }
+                    }
+                }
+                System.out.println("Total selected records = " + count);
+            }
+
         } catch (Exception e) {
-            System.err.println("Erreur lors de la sélection: " + e.getMessage());
+            System.err.println("Erreur Select: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
-    // === DELETE FROM nomTable WHERE ... (simplifié: supprime tout) ===
+    // === DELETE FROM nomTable WHERE ... ===
     public void ProcessDeleteCommand(String[] tokens) {
         try {
-            if (tokens.length < 4 || !tokens[1].equalsIgnoreCase("FROM")) {
-                System.err.println("Syntaxe: DELETE FROM nomTable");
+            // DELETE FROM nomRelation [WHERE ...]
+            if (tokens.length < 3 || !tokens[1].equalsIgnoreCase("FROM")) {
+                System.err.println("Syntaxe: DELETE FROM nomRelation [WHERE condition]");
                 return;
             }
-            
+
             String tableName = tokens[2];
             Relation relation = dbManager.getTable(tableName);
-            
             if (relation == null) {
-                System.err.println("La table '" + tableName + "' n'existe pas");
+                System.err.println("Table inconnue: " + tableName);
                 return;
             }
-            
-            // Pour simplifier, on supprime tous les enregistrements
-            ArrayList<Record> records = relation.GetAllRecords();
-            
-            // Note: Cette implémentation est simplifiée
-            // Une vraie implémentation nécessiterait de parcourir les pages et supprimer individuellement
-            System.out.println("Suppression de tous les enregistrements de la table '" + tableName + "'");
-            System.out.println(records.size() + " enregistrement(s) supprimé(s)");
-            
+
+            String whereClause = "";
+            // Reconstruct command line to find WHERE
+            String cmd = String.join(" ", tokens);
+            if (cmd.toUpperCase().contains(" WHERE ")) {
+                whereClause = cmd.substring(cmd.toUpperCase().indexOf(" WHERE ") + 7).trim();
+            }
+
+            ArrayList<RecordId> rids = relation.getAllRecordIds();
+            int deletedCount = 0;
+
+            for (RecordId rid : rids) {
+                Record r = relation.getRecord(rid);
+                if (evaluateCondition(r, relation, whereClause)) {
+                    relation.DeleteRecord(rid);
+                    deletedCount++;
+                }
+            }
+            System.out.println("Total deleted records=" + deletedCount);
+
         } catch (Exception e) {
-            System.err.println("Erreur lors de la suppression: " + e.getMessage());
+            System.err.println("Erreur Delete: " + e.getMessage());
         }
     }
     
@@ -428,7 +503,268 @@ public class SGBD {
             System.err.println("Erreur lors de l'affichage de l'état du buffer: " + e.getMessage());
         }
     }
-    
+
+    public void ProcessImportCommand(String[] tokens) {
+        try {
+            if (tokens.length < 4 || !tokens[1].equalsIgnoreCase("INTO")) {
+                System.err.println("Syntaxe: IMPORT INTO nomRelation nomFichier.csv");
+                return;
+            }
+
+            String tableName = tokens[2];
+            String fileName = tokens[3];
+            Relation relation = dbManager.getTable(tableName);
+
+            if (relation == null) {
+                System.err.println("La table '" + tableName + "' n'existe pas");
+                return;
+            }
+
+            try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(fileName))) {
+                String line;
+                int count = 0;
+                while ((line = br.readLine()) != null) {
+                    String[] values = line.split(",");
+                    // Basic validation: check if value count matches column count
+                    if (values.length != relation.getColumnNames().size()) {
+                        System.err.println("Erreur ligne " + (count + 1) + ": nombre de valeurs incorrect");
+                        continue;
+                    }
+                    
+                    Record record = new Record();
+                    for (String val : values) {
+                        record.addValue(val.trim());
+                    }
+                    relation.InsertRecord(record);
+                    count++;
+                }
+                System.out.println("Importation terminée : " + count + " enregistrements ajoutés.");
+            } catch (java.io.IOException e) {
+                System.err.println("Erreur de lecture du fichier : " + e.getMessage());
+            }
+
+        } catch (Exception e) {
+            System.err.println("Erreur lors de l'import : " + e.getMessage());
+        }
+    }
+
+    public void ProcessAppendCommand(String[] tokens) {
+        try {
+            // Syntax: APPEND INTO S ALLRECORDS (S.csv)
+            if (tokens.length < 5 || !tokens[1].equalsIgnoreCase("INTO") || !tokens[3].equalsIgnoreCase("ALLRECORDS")) {
+                System.err.println("Syntaxe: APPEND INTO nomRelation ALLRECORDS (nomFichier.csv)");
+                return;
+            }
+
+            String tableName = tokens[2];
+            String filenameRaw = tokens[4];
+            
+            // Remove parentheses if present: (S.csv) -> S.csv
+            String filename = filenameRaw.replaceAll("[()]", "");
+
+            Relation relation = dbManager.getTable(tableName);
+            if (relation == null) {
+                System.err.println("La table '" + tableName + "' n'existe pas");
+                return;
+            }
+
+            try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(filename))) {
+                String line;
+                int count = 0;
+                while ((line = br.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+
+                    // Split by comma
+                    String[] values = line.split(",");
+                    
+                    if (values.length != relation.getColumnNames().size()) {
+                        System.err.println("Erreur ligne " + (count + 1) + ": attendu " + relation.getColumnNames().size() + " colonnes, trouvé " + values.length);
+                        continue;
+                    }
+
+                    Record record = new Record();
+                    for (String val : values) {
+                        record.addValue(cleanValue(val));
+                    }
+                    relation.InsertRecord(record);
+                    count++;
+                }
+                System.out.println("Importation terminée : " + count + " enregistrements ajoutés.");
+            } catch (java.io.IOException e) {
+                System.err.println("Erreur de lecture du fichier : " + e.getMessage());
+            }
+
+        } catch (Exception e) {
+            System.err.println("Erreur lors de l'import : " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public void ProcessUpdateCommand(String[] tokens) {
+        try {
+            // UPDATE nomRel SET col=val [WHERE ...]
+            if (tokens.length < 4 || !tokens[2].equalsIgnoreCase("SET")) {
+                System.err.println("Syntaxe: UPDATE nomRel SET col=val [WHERE ...]");
+                return;
+            }
+
+            String tableName = tokens[1];
+            Relation relation = dbManager.getTable(tableName);
+            if (relation == null) {
+                System.err.println("Table inconnue: " + tableName);
+                return;
+            }
+
+            String cmd = String.join(" ", tokens);
+            String setClause = "";
+            String whereClause = "";
+
+            // Extract SET and WHERE parts
+            int setIndex = cmd.toUpperCase().indexOf(" SET ") + 5;
+            int whereIndex = cmd.toUpperCase().indexOf(" WHERE ");
+
+            if (whereIndex != -1) {
+                setClause = cmd.substring(setIndex, whereIndex).trim();
+                whereClause = cmd.substring(whereIndex + 7).trim();
+            } else {
+                setClause = cmd.substring(setIndex).trim();
+            }
+
+            // Parse assignments (col1=val1, col2=val2)
+            String[] assignments = setClause.split(",");
+            
+            ArrayList<RecordId> rids = relation.getAllRecordIds();
+            int updatedCount = 0;
+
+            for (RecordId rid : rids) {
+                Record r = relation.getRecord(rid);
+                if (evaluateCondition(r, relation, whereClause)) {
+                    // Update record values
+                    for (String assign : assignments) {
+                        String[] parts = assign.split("=");
+                        String colName = parts[0].trim();
+                        String newVal = parts[1].trim().replace("\"", ""); // Remove quotes if string
+
+                        // Handle Aliases
+                        if (colName.contains(".")) colName = colName.split("\\.")[1];
+
+                        int colIdx = relation.getColumnNames().indexOf(colName);
+                        if (colIdx != -1) {
+                            r.getValues().set(colIdx, newVal);
+                        }
+                    }
+                    // Write updates to disk
+                    relation.updateRecord(rid, r);
+                    updatedCount++;
+                }
+            }
+            System.out.println("Total updated records=" + updatedCount);
+
+        } catch (Exception e) {
+            System.err.println("Erreur Update: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    // --- Condition Evaluator Helper ---
+    private boolean evaluateCondition(Record record, Relation relation, String whereClause) {
+        if (whereClause == null || whereClause.isEmpty()) return true;
+
+        // Split by AND
+        String[] conditions = whereClause.split(" AND ");
+
+        for (String cond : conditions) {
+            cond = cond.trim();
+            String operator = "";
+            if (cond.contains("<=")) operator = "<=";
+            else if (cond.contains(">=")) operator = ">=";
+            else if (cond.contains("<>")) operator = "<>";
+            else if (cond.contains("=")) operator = "=";
+            else if (cond.contains("<")) operator = "<";
+            else if (cond.contains(">")) operator = ">";
+            else return false; // Invalid operator
+
+            String[] parts = cond.split(operator);
+            String colName = parts[0].trim();
+            String valStr = parts[1].trim();
+
+            // Handle Aliases (e.g., s.C1 -> C1)
+            if (colName.contains(".")) colName = colName.split("\\.")[1];
+
+            int colIdx = relation.getColumnNames().indexOf(colName);
+            if (colIdx == -1) return false; // Column not found
+
+            String recVal = record.getValues().get(colIdx);
+            String type = relation.getColumnTypes().get(colIdx).toLowerCase();
+
+            // Compare based on type
+            try {
+                if (type.equals("int")) {
+                    int v1 = Integer.parseInt(recVal);
+                    int v2 = Integer.parseInt(valStr);
+                    if (!compareInt(v1, v2, operator)) return false;
+                } else if (type.equals("float") || type.equals("real")) {
+                    float v1 = Float.parseFloat(recVal);
+                    float v2 = Float.parseFloat(valStr);
+                    if (!compareFloat(v1, v2, operator)) return false;
+                } else {
+                    // String comparison
+                    if (!compareString(recVal, valStr.replace("\"", ""), operator)) return false;
+                }
+            } catch (Exception e) {
+                return false; // Error parsing types
+            }
+        }
+        return true;
+    }
+
+    // Helper to remove surrounding quotes from strings
+    private String cleanValue(String val) {
+        val = val.trim();
+        if (val.length() >= 2 && val.startsWith("\"") && val.endsWith("\"")) {
+            return val.substring(1, val.length() - 1);
+        }
+        return val;
+    }
+
+    private boolean compareInt(int v1, int v2, String op) {
+        return switch (op) {
+            case "=" -> v1 == v2;
+            case "<" -> v1 < v2;
+            case ">" -> v1 > v2;
+            case "<=" -> v1 <= v2;
+            case ">=" -> v1 >= v2;
+            case "<>" -> v1 != v2;
+            default -> false;
+        };
+    }
+
+    private boolean compareFloat(float v1, float v2, String op) {
+        return switch (op) {
+            case "=" -> v1 == v2;
+            case "<" -> v1 < v2;
+            case ">" -> v1 > v2;
+            case "<=" -> v1 <= v2;
+            case ">=" -> v1 >= v2;
+            case "<>" -> v1 != v2;
+            default -> false;
+        };
+    }
+
+    private boolean compareString(String v1, String v2, String op) {
+        int cmp = v1.compareTo(v2);
+        return switch (op) {
+            case "=" -> cmp == 0;
+            case "<" -> cmp < 0;
+            case ">" -> cmp > 0;
+            case "<=" -> cmp <= 0;
+            case ">=" -> cmp >= 0;
+            case "<>" -> cmp != 0;
+            default -> false;
+        };
+    }    
+
     // === Méthode main ===
     public static void main(String[] args) {
         try {
@@ -457,4 +793,5 @@ public class SGBD {
             System.exit(1);
         }
     }
+
 }

@@ -240,6 +240,7 @@ public class Relation {
             case "int" -> 4;
             case "float" -> 4;
             case "double" -> 8;
+            case "real" -> 4;
             case "char" -> 1;
             case "string" -> 20;
             default -> 0;
@@ -434,5 +435,55 @@ public class Relation {
                 }
             }
         }
+    }
+
+    // Retrieves a specific record using its RecordId
+    public Record getRecord(RecordId rid) throws IOException {
+        byte[] content = bufferManager.GetPage(rid.getPageId());
+        ByteBuffer buffer = ByteBuffer.wrap(content);
+        
+        // Safety check
+        if (isSlotFree(buffer, rid.getSlotIdx())) {
+            bufferManager.FreePage(rid.getPageId(), false);
+            return null;
+        }
+
+        Record rec = new Record();
+        int dataOffset = DP_OFFSET_BYTEMAP + nbSlotsPerPage + (rid.getSlotIdx() * recordSize);
+        readFromBuffer(rec, buffer, dataOffset);
+        
+        bufferManager.FreePage(rid.getPageId(), false);
+        return rec;
+    }
+
+    // Overwrites a record at a specific slot with new data
+    public void updateRecord(RecordId rid, Record newRec) throws IOException {
+        byte[] content = bufferManager.GetPage(rid.getPageId());
+        ByteBuffer buffer = ByteBuffer.wrap(content);
+        
+        int dataOffset = DP_OFFSET_BYTEMAP + nbSlotsPerPage + (rid.getSlotIdx() * recordSize);
+        writeRecordToBuffer(newRec, buffer, dataOffset);
+        
+        // Mark page as dirty (true) so it saves to disk later
+        bufferManager.FreePage(rid.getPageId(), true);
+    }
+
+    // Returns a list of ALL RecordIds in the relation
+    public ArrayList<RecordId> getAllRecordIds() throws IOException {
+        ArrayList<RecordId> rids = new ArrayList<>();
+        ArrayList<PageId> pages = getDataPages();
+        
+        for (PageId pid : pages) {
+            byte[] content = bufferManager.GetPage(pid);
+            ByteBuffer buffer = ByteBuffer.wrap(content);
+            
+            for (int i = 0; i < nbSlotsPerPage; i++) {
+                if (!isSlotFree(buffer, i)) {
+                    rids.add(new RecordId(pid, i));
+                }
+            }
+            bufferManager.FreePage(pid, false);
+        }
+        return rids;
     }
 }
