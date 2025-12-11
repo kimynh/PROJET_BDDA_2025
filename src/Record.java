@@ -40,7 +40,7 @@ public class Record {
 
     @Override
     public String toString() {
-        return values.toString();
+        return String.join(" ; ", values) + ".";
     }
 }
 

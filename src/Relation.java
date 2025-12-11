@@ -398,41 +398,51 @@ public class Relation {
         }
     }
 
+// Updated to handle VARCHAR correctly
     public void writeRecordToBuffer(Record rec, ByteBuffer bb, int offset) {
         bb.position(offset);
         for (int i = 0; i < columnTypes.size(); i++) {
             String type = columnTypes.get(i).toLowerCase();
             String value = rec.getValues().get(i);
-            switch (type) {
-                case "int" -> bb.putInt(Integer.parseInt(value));
-                case "float" -> bb.putFloat(Float.parseFloat(value));
-                case "double" -> bb.putDouble(Double.parseDouble(value));
-                case "char" -> bb.put((byte) value.charAt(0));
-                case "string" -> {
-                    byte[] strBytes = new byte[20];
-                    byte[] valBytes = value.getBytes();
-                    System.arraycopy(valBytes, 0, strBytes, 0, Math.min(20, valBytes.length));
-                    bb.put(strBytes);
-                }
+            
+            if (type.equals("int")) {
+                bb.putInt(Integer.parseInt(value));
+            } 
+            else if (type.equals("float") || type.equals("real")) {
+                bb.putFloat(Float.parseFloat(value));
+            } 
+            else if (type.startsWith("varchar") || type.equals("string")) {
+                // Calculate size dynamically based on type (e.g. varchar(3) -> 3 bytes)
+                int maxLen = getTypeSize(type); 
+                byte[] strBytes = new byte[maxLen];
+                byte[] valBytes = value.getBytes();
+                // Copy value into fixed-size buffer (padding with 0 if necessary)
+                System.arraycopy(valBytes, 0, strBytes, 0, Math.min(maxLen, valBytes.length));
+                bb.put(strBytes);
             }
         }
     }
 
+    // Updated to handle VARCHAR correctly
     public void readFromBuffer(Record rec, ByteBuffer bb, int offset) {
         bb.position(offset);
         rec.getValues().clear();
         for (int i = 0; i < columnTypes.size(); i++) {
             String type = columnTypes.get(i).toLowerCase();
-            switch (type) {
-                case "int" -> rec.addValue(String.valueOf(bb.getInt()));
-                case "float" -> rec.addValue(String.valueOf(bb.getFloat()));
-                case "double" -> rec.addValue(String.valueOf(bb.getDouble()));
-                case "char" -> rec.addValue(String.valueOf((char) bb.get()));
-                case "string" -> {
-                    byte[] strBytes = new byte[20];
-                    bb.get(strBytes);
-                    rec.addValue(new String(strBytes).trim());
-                }
+            
+            if (type.equals("int")) {
+                rec.addValue(String.valueOf(bb.getInt()));
+            } 
+            else if (type.equals("float") || type.equals("real")) {
+                rec.addValue(String.valueOf(bb.getFloat()));
+            } 
+            else if (type.startsWith("varchar") || type.equals("string")) {
+                // Use getTypeSize to know exactly how many bytes to read
+                int len = getTypeSize(type);
+                byte[] strBytes = new byte[len];
+                bb.get(strBytes);
+                // Convert to string and trim null bytes/spaces
+                rec.addValue(new String(strBytes).trim());
             }
         }
     }
