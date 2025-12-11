@@ -472,24 +472,30 @@ public class SGBD {
     }
     
     // === DELETE FROM nomTable WHERE ... ===
+    // === DELETE nomRelation aliasRel [WHERE ...] ===
     public void ProcessDeleteCommand(String[] tokens) {
         try {
-            // DELETE FROM nomRelation [WHERE ...]
-            if (tokens.length < 3 || !tokens[1].equalsIgnoreCase("FROM")) {
-                System.err.println("Syntaxe: DELETE FROM nomRelation [WHERE condition]");
+            // Check for correct length (DELETE + Table + Alias)
+            if (tokens.length < 3) {
+                System.err.println("Syntaxe: DELETE nomRelation aliasRel [WHERE condition]");
                 return;
             }
 
-            String tableName = tokens[2];
+            // In TP7 syntax: tokens[0]=DELETE, tokens[1]=Table, tokens[2]=Alias
+            String tableName = tokens[1];
             Relation relation = dbManager.getTable(tableName);
+            
             if (relation == null) {
-                System.err.println("Table inconnue: " + tableName);
+                System.err.println("La table '" + tableName + "' n'existe pas");
                 return;
             }
 
             String whereClause = "";
             // Reconstruct command line to find WHERE
-            String cmd = String.join(" ", tokens);
+            StringBuilder sb = new StringBuilder();
+            for (String t : tokens) sb.append(t).append(" ");
+            String cmd = sb.toString();
+            
             if (cmd.toUpperCase().contains(" WHERE ")) {
                 whereClause = cmd.substring(cmd.toUpperCase().indexOf(" WHERE ") + 7).trim();
             }
@@ -499,15 +505,17 @@ public class SGBD {
 
             for (RecordId rid : rids) {
                 Record r = relation.getRecord(rid);
+                // The evaluateCondition method already handles aliases like "c.C1" by stripping the "c."
                 if (evaluateCondition(r, relation, whereClause)) {
                     relation.DeleteRecord(rid);
                     deletedCount++;
                 }
             }
-            System.out.println("Total deleted records=" + deletedCount);
+            System.out.println("Total deleted records = " + deletedCount);
 
         } catch (Exception e) {
             System.err.println("Erreur Delete: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
@@ -635,23 +643,30 @@ public class SGBD {
         }
     }
 
+// === APPEND INTO nomRelation ALLRECORDS (nomFichier.csv) ===
     public void ProcessAppendCommand(String[] tokens) {
         try {
-            // Syntax: APPEND INTO S ALLRECORDS (S.csv)
-            if (tokens.length < 5 || !tokens[1].equalsIgnoreCase("INTO") || !tokens[3].equalsIgnoreCase("ALLRECORDS")) {
+            // 1. Reconstruct command to handle "ALLRECORDS(S.csv)" without space
+            String fullCmd = String.join(" ", tokens);
+            // Add space before '(' to separate ALLRECORDS from the filename
+            fullCmd = fullCmd.replace("(", " ("); 
+            
+            // 2. Re-tokenize
+            String[] cleanTokens = fullCmd.trim().split("\\s+");
+
+            // 3. Check syntax (Expect at least 5 tokens: APPEND, INTO, Table, ALLRECORDS, File)
+            if (cleanTokens.length < 5 || !cleanTokens[1].equalsIgnoreCase("INTO") || !cleanTokens[3].equalsIgnoreCase("ALLRECORDS")) {
                 System.err.println("Syntaxe: APPEND INTO nomRelation ALLRECORDS (nomFichier.csv)");
                 return;
             }
 
-            String tableName = tokens[2];
-            String filenameRaw = tokens[4];
-            
-            // Remove parentheses if present: (S.csv) -> S.csv
-            String filename = filenameRaw.replaceAll("[()]", "");
+            String tableName = cleanTokens[2];
+            String filenameRaw = cleanTokens[4];
+            String filename = filenameRaw.replaceAll("[()]", ""); // Remove parentheses
 
             Relation relation = dbManager.getTable(tableName);
             if (relation == null) {
-                System.err.println("La table '" + tableName + "' n'existe pas");
+                System.err.println("Table inconnue: " + tableName);
                 return;
             }
 
@@ -661,37 +676,33 @@ public class SGBD {
                 while ((line = br.readLine()) != null) {
                     line = line.trim();
                     if (line.isEmpty()) continue;
-
-                    // Split by comma
-                    String[] values = line.split(",");
                     
-                    if (values.length != relation.getColumnNames().size()) {
-                        System.err.println("Erreur ligne " + (count + 1) + ": attendu " + relation.getColumnNames().size() + " colonnes, trouvé " + values.length);
-                        continue;
-                    }
+                    // Split CSV
+                    String[] values = line.split(",");
+                    if (values.length != relation.getColumnNames().size()) continue;
 
                     Record record = new Record();
                     for (String val : values) {
-                        record.addValue(cleanValue(val));
+                        record.addValue(cleanValue(val)); // Clean quotes if any
                     }
                     relation.InsertRecord(record);
                     count++;
                 }
-                System.out.println("Importation terminée : " + count + " enregistrements ajoutés.");
+                // (Optional) Uncomment to see confirmation
+                // System.out.println("Importation terminée : " + count + " enregistrements.");
             } catch (java.io.IOException e) {
-                System.err.println("Erreur de lecture du fichier : " + e.getMessage());
+                System.err.println("Erreur lecture fichier: " + e.getMessage());
             }
 
         } catch (Exception e) {
-            System.err.println("Erreur lors de l'import : " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("Erreur Append: " + e.getMessage());
         }
     }
 
     public void ProcessUpdateCommand(String[] tokens) {
         try {
             // UPDATE nomRel SET col=val [WHERE ...]
-            if (tokens.length < 4 || !tokens[2].equalsIgnoreCase("SET")) {
+            if (tokens.length < 4 || !tokens[3].equalsIgnoreCase("SET")) {
                 System.err.println("Syntaxe: UPDATE nomRel SET col=val [WHERE ...]");
                 return;
             }
