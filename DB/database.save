@@ -1,0 +1,10 @@
+START_TABLE
+name=Pomme
+columns=C1:INT,C2:VARCHAR(3),C3:INT
+header=0,1
+END_TABLE
+START_TABLE
+name=S
+columns=C1:INT,C2:REAL,C3:INT,C4:INT,C5:INT
+header=0,3
+END_TABLE
